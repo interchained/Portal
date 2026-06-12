@@ -5,7 +5,7 @@
 > Not a Next.js clone. A different category: every app has a **living contract**, agents check every change against business goals and brand rules, and no patch lands without human approval.
 
 ```bash
-npm create portal-app my-site
+npm create @interchained/portal-app my-site
 cd my-site
 portal dev
 portal audit
@@ -213,7 +213,7 @@ The runner does the work. The sentinel catches mistakes. You make the final call
 | `@interchained/portal-core` | Vite plugin, file-based routing |
 | `@interchained/portal-react` | PortalProvider, Router, Link, Head, hooks |
 | `portal-cli` | The `portal` CLI binary |
-| `create-portal-app` | `npm create portal-app` scaffolder |
+| `@interchained/create-portal-app` | `npm create @interchained/portal-app` scaffolder |
 
 ---
 

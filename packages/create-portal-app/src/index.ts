@@ -3,9 +3,9 @@
  * create-portal-app — scaffold a new Portal project.
  *
  * Usage:
- *   npm create portal-app
- *   npm create portal-app my-site
- *   npm create portal-app my-site --template startup-landing
+ *   npm create @interchained/portal-app
+ *   npm create @interchained/portal-app my-site
+ *   npm create @interchained/portal-app my-site --template startup-landing
  */
 
 import { mkdir, cp, readFile, writeFile, readdir } from "node:fs/promises";

@@ -17,7 +17,7 @@ const FEATURES = [
 ];
 
 const STEPS = [
-  { cmd: "npm create portal-app", label: "Scaffold your app" },
+  { cmd: "npm create @interchained/portal-app", label: "Scaffold your app" },
   { cmd: "portal dev",            label: "Start local dev server" },
   { cmd: "portal audit",          label: "See what needs fixing" },
   { cmd: "portal generate page \"Your page idea\"", label: "Ship with AI in seconds" },
@@ -99,7 +99,7 @@ export default function HomePage(): React.ReactElement {
             Your app deserves a contract. Start in 30 seconds.
           </p>
           <Link href="/signup" className="btn btn-primary" style={{ fontSize: "1.05rem" }}>
-            npm create portal-app →
+            npm create @interchained/portal-app →
           </Link>
         </div>
       </section>
