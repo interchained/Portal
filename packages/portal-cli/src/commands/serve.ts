@@ -78,7 +78,11 @@ const COMPRESSIBLE = new Set([
   "text/plain",
   "application/xml",
   "application/manifest+json",
+  "application/wasm",
 ]);
+
+/** Skip compressing very large files at boot — keeps startup fast & RAM bounded. */
+const MAX_COMPRESS = 8 * 1024 * 1024;
 
 function mimeFor(path: string): string {
   return MIME[extname(path).toLowerCase()] ?? "application/octet-stream";
@@ -169,7 +173,7 @@ async function buildAssetMap(
     };
 
     // Compress once, in memory, at max quality — only keep it if it actually wins.
-    if (isCompressible(mime) && raw.length >= 256) {
+    if (isCompressible(mime) && raw.length >= 256 && raw.length <= MAX_COMPRESS) {
       const br = brotliCompressSync(raw, {
         params: {
           [zc.BROTLI_PARAM_QUALITY]: 11,
@@ -276,9 +280,21 @@ function securityHeaders(opts: { csp: boolean; hsts: boolean }): Record<string, 
 
 function pickEncoding(accept: string | undefined, asset: Asset): "br" | "gzip" | null {
   if (!accept) return null;
-  const a = accept.toLowerCase();
-  if (asset.br && a.includes("br")) return "br";
-  if (asset.gz && a.includes("gzip")) return "gzip";
+  // Parse "br;q=0.9, gzip, identity;q=0" → token weights, honoring q=0 opt-outs.
+  const q: Record<string, number> = {};
+  for (const part of accept.toLowerCase().split(",")) {
+    const [tok, ...params] = part.trim().split(";");
+    const name = (tok ?? "").trim();
+    if (!name) continue;
+    let weight = 1;
+    for (const p of params) {
+      const m = /^q=([0-9.]+)$/.exec(p.trim());
+      if (m) weight = parseFloat(m[1]!);
+    }
+    q[name] = weight;
+  }
+  if (asset.br && (q["br"] ?? q["*"] ?? 0) > 0) return "br";
+  if (asset.gz && (q["gzip"] ?? q["*"] ?? 0) > 0) return "gzip";
   return null;
 }
 
@@ -416,26 +432,26 @@ export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
       return;
     }
 
-    // Health / readiness
+    // Resolve + sanitize path (query string stripped by URL.pathname)
     const rawUrl = req.url ?? "/";
-    if (rawUrl === "/__health") {
-      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-      res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
-      return;
-    }
-    if (rawUrl === "/__ready") {
-      res.writeHead(ready ? 200 : 503, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-      res.end(JSON.stringify({ ready }));
-      return;
-    }
-
-    // Resolve + sanitize path
     let pathname: string;
     try {
       pathname = decodeURIComponent(new URL(rawUrl, "http://localhost").pathname);
     } catch {
       res.writeHead(400, secHeaders);
       res.end("Bad Request");
+      return;
+    }
+
+    // Health / readiness (tolerant of query strings, e.g. /__health?probe=1)
+    if (pathname === "/__health") {
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
+      return;
+    }
+    if (pathname === "/__ready") {
+      res.writeHead(ready ? 200 : 503, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      res.end(JSON.stringify({ ready }));
       return;
     }
     // Normalize and reject traversal
@@ -470,12 +486,21 @@ export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
       return;
     }
 
-    // Conditional request → 304
+    // Negotiate encoding FIRST — a strong ETag must vary per representation
+    // (RFC 9110), so the identity, gzip and brotli bodies each get their own.
+    const enc = pickEncoding(req.headers["accept-encoding"] as string | undefined, asset);
+    const etag =
+      enc === "br"   ? asset.etag.slice(0, -1) + '-br"'
+    : enc === "gzip" ? asset.etag.slice(0, -1) + '-gz"'
+    :                  asset.etag;
+
+    // Conditional request → 304 (matched against the representation ETag)
     const inm = req.headers["if-none-match"];
-    if (inm && inm === asset.etag) {
+    if (inm && inm === etag) {
       res.writeHead(304, {
-        "ETag": asset.etag,
+        "ETag": etag,
         "Cache-Control": asset.cacheControl,
+        "Vary": "Accept-Encoding",
         ...secHeaders,
       });
       res.end();
@@ -484,7 +509,7 @@ export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
 
     const baseHeaders: Record<string, string> = {
       "Content-Type": asset.mime,
-      "ETag": asset.etag,
+      "ETag": etag,
       "Last-Modified": asset.lastModified,
       "Cache-Control": asset.cacheControl,
       "Vary": "Accept-Encoding",
@@ -492,19 +517,31 @@ export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
     };
     if (opts.cors) baseHeaders["Access-Control-Allow-Origin"] = "*";
 
-    // Range requests (only on identity, for media)
+    const isMedia = asset.mime.startsWith("video/") || asset.mime.startsWith("audio/");
+
+    // Range requests — media only, always identity bytes (media is never compressed).
     const range = req.headers["range"];
-    if (range && !isFallback) {
+    if (range && isMedia && !isFallback) {
       const parsed = parseRange(range, asset.raw.length);
       if (parsed) {
         const { start, end } = parsed;
         res.writeHead(206, {
           ...baseHeaders,
+          "ETag": asset.etag,
           "Content-Range": `bytes ${start}-${end}/${asset.raw.length}`,
           "Accept-Ranges": "bytes",
           "Content-Length": String(end - start + 1),
         });
         res.end(req.method === "HEAD" ? undefined : asset.raw.subarray(start, end + 1));
+        return;
+      }
+      // Syntactically valid header but unsatisfiable → 416.
+      if (/^bytes=\d*-\d*$/.test(range.trim())) {
+        res.writeHead(416, {
+          ...baseHeaders,
+          "Content-Range": `bytes */${asset.raw.length}`,
+        });
+        res.end();
         return;
       }
     }
@@ -518,16 +555,13 @@ export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
       } catch { /* proxy may not forward 1xx — harmless */ }
     }
 
-    // Content negotiation
-    const enc = pickEncoding(req.headers["accept-encoding"] as string | undefined, asset);
+    // Apply the negotiated encoding to the body.
     let body = asset.raw;
     if (enc === "br" && asset.br) { body = asset.br; baseHeaders["Content-Encoding"] = "br"; }
     else if (enc === "gzip" && asset.gz) { body = asset.gz; baseHeaders["Content-Encoding"] = "gzip"; }
 
     baseHeaders["Content-Length"] = String(body.length);
-    if (asset.raw.length && (asset.mime.startsWith("video/") || asset.mime.startsWith("audio/"))) {
-      baseHeaders["Accept-Ranges"] = "bytes";
-    }
+    if (isMedia) baseHeaders["Accept-Ranges"] = "bytes";
 
     res.writeHead(200, baseHeaders);
     res.end(req.method === "HEAD" ? undefined : body);
