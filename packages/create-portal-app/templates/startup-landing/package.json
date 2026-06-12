@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev":     "portal dev",
-    "build":   "portal build",
-    "preview": "vite preview",
-    "audit":   "portal audit",
-    "improve": "portal improve",
-    "guard":   "portal guard"
+    "dev":      "portal dev",
+    "build":    "portal build",
+    "preview":  "vite preview",
+    "serve":    "portal serve",
+    "compress": "portal compress dist",
+    "audit":    "portal audit",
+    "improve":  "portal improve",
+    "guard":    "portal guard"
   },
   "dependencies": {
     "@interchained/portal-react": "^0.1.1",
@@ -19,7 +21,7 @@
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
-    "@interchained/portal-cli": "^0.1.6",
+    "@interchained/portal-cli": "^0.1.7",
     "@interchained/portal-core": "^0.1.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

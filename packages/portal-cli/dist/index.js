@@ -10,6 +10,8 @@ import { fileURLToPath } from "node:url";
 import { devCommand } from "./commands/dev.js";
 import { buildCommand } from "./commands/build.js";
 import { previewCommand } from "./commands/preview.js";
+import { serveCommand } from "./commands/serve.js";
+import { compressCommand } from "./commands/compress.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { auditCommand } from "./commands/audit.js";
 import { explainCommand } from "./commands/explain.js";
@@ -50,6 +52,29 @@ program
     .description("Run the production build locally")
     .option("-p, --port <number>", "Port", parseInt)
     .action((opts) => previewCommand(opts));
+program
+    .command("serve")
+    .description("Hardened in-memory production server (Early Hints, Brotli, security headers)")
+    .option("-p, --port <number>", "Port (default 4173 or $PORT)", parseInt)
+    .option("-H, --host <host>", "Host to bind (default 0.0.0.0)")
+    .option("-d, --dir <dir>", "Build directory to serve", "dist")
+    .option("--no-csp", "Disable Content-Security-Policy header")
+    .option("--no-hsts", "Disable Strict-Transport-Security header")
+    .option("--no-early-hints", "Disable HTTP 103 Early Hints")
+    .option("--cors", "Send Access-Control-Allow-Origin: *")
+    .action((opts) => serveCommand({
+    port: opts.port,
+    host: opts.host,
+    dir: opts.dir,
+    csp: opts.csp,
+    hsts: opts.hsts,
+    earlyHints: opts.earlyHints,
+    cors: opts.cors,
+}));
+program
+    .command("compress [dir]")
+    .description("Pre-compress build output to disk (.br + .gz) for nginx/Caddy")
+    .action((dir) => compressCommand(dir ?? "dist"));
 // ── Health & docs ─────────────────────────────────────────────────────────────
 program
     .command("doctor")
