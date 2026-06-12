@@ -7,7 +7,7 @@
  * Flow without Sentinel (--no-sentinel or API key absent):
  *   Runner generates → patch saved as "pending" → human approves via CLI
  */
-import { readFile } from "node:fs/promises";
+import { readFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import { createPatch, PatchStore } from "./patch.js";
 /**
@@ -15,7 +15,7 @@ import { createPatch, PatchStore } from "./patch.js";
  */
 export async function generatePage(page, opts, store) {
     const { runner, sentinel, contract } = opts;
-    const fileName = routeToFileName(page.route);
+    const fileName = await routeToFileName(page.route, join(opts.projectRoot, "routes"));
     const filePath = join(opts.projectRoot, "routes", fileName);
     let original = "";
     try {
@@ -79,9 +79,27 @@ export async function generateFromPrompt(prompt, opts, store) {
     return generatePage(page, opts, resolvedStore);
 }
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function routeToFileName(route) {
-    const clean = route.replace(/^\//, "") || "index";
-    return `${clean}.page.tsx`;
+/**
+ * Convert a route like /docs to a file path like docs/index.page.tsx.
+ *
+ * Rule: if a routes/<segment>/ directory already exists, use the
+ * index convention (foo/index.page.tsx) so the file sits alongside its
+ * siblings instead of shadowing the directory. Otherwise use the flat
+ * convention (foo.page.tsx). Root / always maps to index.page.tsx.
+ */
+async function routeToFileName(route, routesDir) {
+    const clean = route.replace(/^\//, "").replace(/\/$/, "") || "index";
+    if (clean === "index")
+        return "index.page.tsx";
+    // Check if a directory already exists for this segment
+    const dirPath = join(routesDir, clean);
+    let dirExists = false;
+    try {
+        await access(dirPath);
+        dirExists = true;
+    }
+    catch { /* */ }
+    return dirExists ? `${clean}/index.page.tsx` : `${clean}.page.tsx`;
 }
 function promptToRoute(prompt) {
     return ("/" +

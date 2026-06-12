@@ -10,8 +10,9 @@ export class Runner {
         this.client = new AiAssistClient({
             apiKey: config.apiKey ?? process.env["AIASSIST_API_KEY"] ?? process.env["VITE_AIAS_API_KEY"] ?? "",
             baseUrl: config.baseUrl,
-            model: config.model ?? "gpt-4o-mini",
-            timeoutMs: config.timeoutMs ?? 45_000,
+            model: config.model ?? "claude-haiku-4-5-20251001",
+            provider: "anthropic",
+            timeoutMs: config.timeoutMs ?? 60_000,
         });
     }
     async run(task, context, systemPrompt) {

@@ -41,6 +41,8 @@ export interface AiAssistConfig {
   baseUrl?: string;
   /** Model identifier */
   model?: string;
+  /** Provider to route through — sent as X-AiAssist-Provider header. Defaults to "anthropic" */
+  provider?: string;
   /** Request timeout in ms. Defaults to 60 000 */
   timeoutMs?: number;
 }
@@ -51,10 +53,13 @@ export class AiAssistClient {
   private readonly model: string;
   private readonly timeoutMs: number;
 
+  private readonly provider: string;
+
   constructor(config: AiAssistConfig) {
-    this.apiKey   = config.apiKey;
-    this.baseUrl  = (config.baseUrl ?? "https://api.aiassist.net/v1").replace(/\/$/, "");
-    this.model    = config.model   ?? "gpt-4o";
+    this.apiKey    = config.apiKey;
+    this.baseUrl   = (config.baseUrl ?? "https://api.aiassist.net/v1").replace(/\/$/, "");
+    this.model     = config.model    ?? "claude-haiku-4-5-20251001";
+    this.provider  = config.provider ?? "anthropic";
     this.timeoutMs = config.timeoutMs ?? 60_000;
   }
 
@@ -81,7 +86,8 @@ export class AiAssistClient {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
+          "Authorization": `Bearer ${this.apiKey}`,
+          "X-AiAssist-Provider": this.provider,
         },
         body: JSON.stringify({
           model: this.model,

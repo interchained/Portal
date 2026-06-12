@@ -1,14 +1,21 @@
 /**
- * Load app.contract.ts from a Portal project.
- * Uses a simple regex-based extraction since we can't dynamically import TS at runtime.
- * For full evaluation, we'd use jiti/tsx — but for MVP we parse the exported object.
+ * Load app.contract from a Portal project.
+ *
+ * Supported formats (checked in order):
+ *   1. app.contract.json          — plain JSON, zero parsing ambiguity
+ *   2. app.contract.ts / .js      — static TS/JS, several export patterns handled
+ *
+ * The contract file is intentionally kept as static data (no runtime logic).
+ * We extract it with a regex rather than executing arbitrary code.
  */
 import { readFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import { validateContract } from "@interchained/portal-contract";
 const CANDIDATE_PATHS = [
+    "app.contract.json",
     "app.contract.ts",
     "app.contract.js",
+    "portal.contract.json",
     "portal.contract.ts",
     "portal.contract.js",
 ];
@@ -19,35 +26,50 @@ export async function findContractPath(root) {
             await access(full);
             return full;
         }
-        catch { /* continue */ }
+        catch { /* next */ }
     }
     return null;
 }
-/**
- * Load a contract from a Portal project.
- * Attempts to read and evaluate the contract file.
- * Falls back to a safe empty contract if not found.
- */
 export async function loadContract(root = process.cwd()) {
     const contractPath = await findContractPath(root);
-    if (!contractPath) {
+    if (!contractPath)
         return { name: "Portal App", goals: [] };
-    }
     try {
         const src = await readFile(contractPath, "utf-8");
-        // Extract the object passed to defineApp() using a simple heuristic.
-        // This is intentionally dumb — the contract file should be static data, not logic.
-        const match = src.match(/defineApp\(\s*(\{[\s\S]*?\})\s*\)/);
-        if (!match) {
-            return { name: "Portal App", goals: [] };
+        // ── JSON file ─────────────────────────────────────────────────────────────
+        if (contractPath.endsWith(".json")) {
+            return validateContract(JSON.parse(src));
         }
-        // Safe eval via Function constructor (no side effects in contract files)
-        const fn = new Function(`return (${match[1]})`);
-        const raw = fn();
-        return validateContract(raw);
+        // ── TS/JS patterns ────────────────────────────────────────────────────────
+        // We try several common shapes, in order of specificity.
+        // 1. defineApp({ ... })
+        const defineMatch = src.match(/defineApp\s*\(\s*(\{[\s\S]*?\})\s*\)/);
+        if (defineMatch)
+            return evalObject(defineMatch[1]);
+        // 2. export default { ... }   (inline object literal)
+        const exportDefaultInline = src.match(/export\s+default\s+(\{[\s\S]*\})\s*;?\s*$/);
+        if (exportDefaultInline)
+            return evalObject(exportDefaultInline[1]);
+        // 3. const <name>: AppContract = { ... }
+        const constTyped = src.match(/const\s+\w+\s*:\s*AppContract\s*=\s*(\{[\s\S]*?\});\s*$/m);
+        if (constTyped)
+            return evalObject(constTyped[1]);
+        // 4. const <name> = { ... }   (no type annotation)
+        const constPlain = src.match(/const\s+\w+\s*=\s*(\{[\s\S]*?\});\s*$/m);
+        if (constPlain)
+            return evalObject(constPlain[1]);
+        return { name: "Portal App", goals: [] };
     }
     catch {
         return { name: "Portal App", goals: [] };
     }
+}
+function evalObject(src) {
+    // Strip TypeScript casts and `as const` before evaluating
+    const cleaned = src
+        .replace(/\s+as\s+\w[\w.]*(\[\])?/g, "")
+        .replace(/\s+satisfies\s+\w[\w.]*/g, "");
+    const fn = new Function(`return (${cleaned})`);
+    return validateContract(fn());
 }
 //# sourceMappingURL=contract.js.map

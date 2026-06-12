@@ -1,6 +1,6 @@
 {
   "name": "@interchained/portal-cli",
-  "version": "0.1.3",
+  "version": "0.1.5",
   "description": "Portal CLI — dev, build, audit, improve, generate, guard",
   "license": "GPL-3.0-or-later",
   "author": "Interchained <dev@interchained.org>",

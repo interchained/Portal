@@ -69,7 +69,8 @@ program
 program
   .command("doctor")
   .description("Check environment, config, contracts, and routes for issues")
-  .action(() => doctorCommand());
+  .option("--fix", "Auto-repair fixable issues (route conflicts, etc.)")
+  .action((opts) => doctorCommand({ fix: !!opts.fix }));
 
 program
   .command("explain <target>")

@@ -18,10 +18,12 @@ export class AiAssistClient {
     baseUrl;
     model;
     timeoutMs;
+    provider;
     constructor(config) {
         this.apiKey = config.apiKey;
         this.baseUrl = (config.baseUrl ?? "https://api.aiassist.net/v1").replace(/\/$/, "");
-        this.model = config.model ?? "gpt-4o";
+        this.model = config.model ?? "claude-haiku-4-5-20251001";
+        this.provider = config.provider ?? "anthropic";
         this.timeoutMs = config.timeoutMs ?? 60_000;
     }
     /** Single-turn completion — convenience wrapper around chat() */
@@ -42,7 +44,8 @@ export class AiAssistClient {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${this.apiKey}`,
+                    "Authorization": `Bearer ${this.apiKey}`,
+                    "X-AiAssist-Provider": this.provider,
                 },
                 body: JSON.stringify({
                     model: this.model,

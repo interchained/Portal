@@ -18,12 +18,10 @@ export class Sentinel {
     client;
     constructor(config = {}) {
         this.client = new AiAssistClient({
-            apiKey: config.apiKey ??
-                process.env["AIASSIST_API_KEY"] ??
-                process.env["VITE_AIAS_API_KEY"] ??
-                "",
+            apiKey: config.apiKey ?? process.env["AIASSIST_API_KEY"] ?? process.env["VITE_AIAS_API_KEY"] ?? "",
             baseUrl: config.baseUrl,
-            model: config.model ?? "gpt-4o",
+            model: config.model ?? "claude-opus-4-6",
+            provider: "anthropic",
             timeoutMs: config.timeoutMs ?? 120_000,
         });
     }

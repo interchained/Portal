@@ -24,6 +24,8 @@ export interface AiAssistConfig {
     baseUrl?: string;
     /** Model identifier */
     model?: string;
+    /** Provider to route through — sent as X-AiAssist-Provider header. Defaults to "anthropic" */
+    provider?: string;
     /** Request timeout in ms. Defaults to 60 000 */
     timeoutMs?: number;
 }
@@ -32,6 +34,7 @@ export declare class AiAssistClient {
     private readonly baseUrl;
     private readonly model;
     private readonly timeoutMs;
+    private readonly provider;
     constructor(config: AiAssistConfig);
     /** Single-turn completion — convenience wrapper around chat() */
     complete(prompt: string, systemPrompt?: string, options?: CompletionOptions): Promise<string>;
