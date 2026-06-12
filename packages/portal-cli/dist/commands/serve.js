@@ -198,13 +198,15 @@ function extractEarlyHints(html) {
             (h.as === "font" ? "; crossorigin" : ""));
 }
 // ── Security headers ──────────────────────────────────────────────────────────
-// Default CSP. Google Fonts is allowed out of the box because every Portal
-// template ships with it — a default that blocks our own fonts is a footgun.
+// Default CSP. Google Fonts + Cloudflare's analytics beacon are allowed out of
+// the box: every Portal template ships with Google Fonts, and the most common
+// deploy path is behind Cloudflare (which auto-injects beacon.min.js). A default
+// that blocks our own fonts or the standard CDN's analytics is a footgun.
 // Represented as directive → sources so `--csp-add` can merge into it.
 function defaultCspDirectives() {
     return new Map([
         ["default-src", ["'self'"]],
-        ["script-src", ["'self'"]],
+        ["script-src", ["'self'", "https://static.cloudflareinsights.com"]],
         ["style-src", ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]],
         ["img-src", ["'self'", "data:", "blob:", "https:"]],
         ["font-src", ["'self'", "https://fonts.gstatic.com", "data:"]],
@@ -345,11 +347,18 @@ export async function serveCommand(opts = {}) {
     const earlyHintLinks = useHints && indexAsset
         ? extractEarlyHints(indexAsset.raw.toString("utf-8"))
         : [];
+    // Allow CSP tweaks via env — handy for VPS / process-manager deploys that
+    // can't easily change the launch command. PORTAL_CSP_ADD is comma/newline-
+    // separated fragments; PORTAL_CSP_POLICY replaces the whole policy.
+    const envCspAdd = (process.env["PORTAL_CSP_ADD"] ?? "")
+        .split(/[\n,]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
     const secHeaders = securityHeaders({
         csp: useCsp,
         hsts: useHsts,
-        cspPolicy: opts.cspPolicy,
-        cspAdd: opts.cspAdd,
+        cspPolicy: opts.cspPolicy ?? process.env["PORTAL_CSP_POLICY"],
+        cspAdd: [...(opts.cspAdd ?? []), ...envCspAdd],
     });
     // ── Compression report ──────────────────────────────────────────────────────
     const brSaved = report.rawBytes - report.brBytes;
