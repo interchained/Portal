@@ -1,0 +1,24 @@
+{
+  "name": "@interchained/portal-contract",
+  "version": "0.1.0",
+  "description": "Contract system for Portal apps — defineApp, defineAgent, living app contract types",
+  "license": "GPL-3.0-or-later",
+  "author": "Interchained <dev@interchained.org>",
+  "type": "module",
+  "exports": {
+    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run typecheck && npm run build"
+  },
+  "devDependencies": { "typescript": "^5.4.5" },
+  "engines": { "node": ">=18" },
+  "publishConfig": { "access": "public" }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "portal-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "clean": "pnpm -r run clean",
+    "dev:cli": "pnpm --filter portal-cli run dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

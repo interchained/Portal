@@ -1,0 +1,39 @@
+{
+  "name": "@interchained/create-portal-app",
+  "version": "0.1.1",
+  "description": "Scaffold a Portal app — npx create-portal-app",
+  "license": "GPL-3.0-or-later",
+  "author": "Interchained <dev@interchained.org>",
+  "type": "module",
+  "bin": {
+    "create-portal-app": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run typecheck && npm run build"
+  },
+  "dependencies": {
+    "picocolors": "^1.0.1",
+    "prompts": "^2.4.2",
+    "ora": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "@types/prompts": "^2.4.9",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

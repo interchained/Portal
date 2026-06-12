@@ -1,0 +1,43 @@
+{
+  "name": "@interchained/portal-agent",
+  "version": "0.1.3",
+  "description": "Agent runtime for Portal — AiAssist.net runner/sentinel, audit, generate, improve, guard",
+  "license": "GPL-3.0-or-later",
+  "author": "Interchained <dev@interchained.org>",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run typecheck && npm run build"
+  },
+  "dependencies": {
+    "@interchained/portal-contract": "workspace:*",
+    "picocolors": "^1.0.1",
+    "ora": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
