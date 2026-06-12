@@ -1,6 +1,14 @@
 /**
  * portal agent list  — list configured agents and their permissions
  * portal agent run   — run a specific agent task manually
+ *
+ * Agents are real defineAgent({ ... }) definitions loaded from agents/*.agent.ts.
+ * Their declared permissions are enforced:
+ *   - canPatch: false        → read-only; the agent reviews and reports, never writes
+ *   - canPatch: true         → may produce patches
+ *   - requiresApproval: true → patches stay pending for `portal patch`
+ *   - requiresApproval: false→ clean patches are applied automatically
+ * When requiresApproval is unset, it falls back to the contract's publishing policy.
  */
 export declare function agentListCommand(): Promise<void>;
 export declare function agentRunCommand(name: string): Promise<void>;
