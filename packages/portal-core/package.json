@@ -1,6 +1,6 @@
 {
   "name": "@interchained/portal-core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Core Vite plugin, file-based routing, and SSR adapter for Portal",
   "license": "GPL-3.0-or-later",
   "author": "Interchained <dev@interchained.org>",
@@ -29,7 +29,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@interchained/portal-contract": "workspace:*",
+    "@interchained/portal-contract": "^0.1.0",
     "glob": "^10.3.10",
     "chokidar": "^3.6.0"
   },

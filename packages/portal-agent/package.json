@@ -1,6 +1,6 @@
 {
   "name": "@interchained/portal-agent",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Agent runtime for Portal — AiAssist.net runner/sentinel, audit, generate, improve, guard",
   "license": "GPL-3.0-or-later",
   "author": "Interchained <dev@interchained.org>",
@@ -26,7 +26,7 @@
     "prepublishOnly": "npm run typecheck && npm run build"
   },
   "dependencies": {
-    "@interchained/portal-contract": "workspace:*",
+    "@interchained/portal-contract": "^0.1.0",
     "picocolors": "^1.0.1",
     "ora": "^8.0.1"
   },
