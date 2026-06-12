@@ -198,6 +198,45 @@ function extractEarlyHints(html) {
             (h.as === "font" ? "; crossorigin" : ""));
 }
 // ── Security headers ──────────────────────────────────────────────────────────
+// Default CSP. Google Fonts is allowed out of the box because every Portal
+// template ships with it — a default that blocks our own fonts is a footgun.
+// Represented as directive → sources so `--csp-add` can merge into it.
+function defaultCspDirectives() {
+    return new Map([
+        ["default-src", ["'self'"]],
+        ["script-src", ["'self'"]],
+        ["style-src", ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]],
+        ["img-src", ["'self'", "data:", "blob:", "https:"]],
+        ["font-src", ["'self'", "https://fonts.gstatic.com", "data:"]],
+        ["connect-src", ["'self'", "https:", "wss:"]],
+        ["media-src", ["'self'", "https:", "data:", "blob:"]],
+        ["object-src", ["'none'"]],
+        ["base-uri", ["'self'"]],
+        ["form-action", ["'self'"]],
+        ["frame-ancestors", ["'none'"]],
+        ["upgrade-insecure-requests", []],
+    ]);
+}
+// Merge "--csp-add" fragments like "script-src https://static.cloudflareinsights.com"
+// into the default directive map, then serialize. Unknown directives are created.
+function buildCsp(addFragments) {
+    const directives = defaultCspDirectives();
+    for (const frag of addFragments) {
+        const parts = frag.trim().split(/\s+/).filter(Boolean);
+        const name = parts.shift();
+        if (!name)
+            continue;
+        const existing = directives.get(name) ?? [];
+        for (const src of parts) {
+            if (!existing.includes(src))
+                existing.push(src);
+        }
+        directives.set(name, existing);
+    }
+    return [...directives.entries()]
+        .map(([k, v]) => (v.length ? `${k} ${v.join(" ")}` : k))
+        .join("; ");
+}
 function securityHeaders(opts) {
     const h = {
         "X-Content-Type-Options": "nosniff",
@@ -212,20 +251,9 @@ function securityHeaders(opts) {
         h["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload";
     }
     if (opts.csp) {
-        h["Content-Security-Policy"] = [
-            "default-src 'self'",
-            "script-src 'self'",
-            "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data: blob: https:",
-            "font-src 'self' data:",
-            "connect-src 'self' https: wss:",
-            "media-src 'self' https: data: blob:",
-            "object-src 'none'",
-            "base-uri 'self'",
-            "form-action 'self'",
-            "frame-ancestors 'none'",
-            "upgrade-insecure-requests",
-        ].join("; ");
+        h["Content-Security-Policy"] = opts.cspPolicy?.trim()
+            ? opts.cspPolicy.trim()
+            : buildCsp(opts.cspAdd ?? []);
     }
     return h;
 }
@@ -317,7 +345,12 @@ export async function serveCommand(opts = {}) {
     const earlyHintLinks = useHints && indexAsset
         ? extractEarlyHints(indexAsset.raw.toString("utf-8"))
         : [];
-    const secHeaders = securityHeaders({ csp: useCsp, hsts: useHsts });
+    const secHeaders = securityHeaders({
+        csp: useCsp,
+        hsts: useHsts,
+        cspPolicy: opts.cspPolicy,
+        cspAdd: opts.cspAdd,
+    });
     // ── Compression report ──────────────────────────────────────────────────────
     const brSaved = report.rawBytes - report.brBytes;
     const brPct = report.rawBytes ? (brSaved / report.rawBytes) * 100 : 0;

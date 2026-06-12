@@ -29,6 +29,8 @@ export interface ServeOptions {
     host?: string;
     dir?: string;
     csp?: boolean;
+    cspPolicy?: string;
+    cspAdd?: string[];
     hsts?: boolean;
     earlyHints?: boolean;
     cors?: boolean;

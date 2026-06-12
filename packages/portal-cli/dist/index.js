@@ -52,6 +52,10 @@ program
     .description("Run the production build locally")
     .option("-p, --port <number>", "Port", parseInt)
     .action((opts) => previewCommand(opts));
+const collectCsp = (val, acc) => {
+    acc.push(val);
+    return acc;
+};
 program
     .command("serve")
     .description("Hardened in-memory production server (Early Hints, Brotli, security headers)")
@@ -59,6 +63,8 @@ program
     .option("-H, --host <host>", "Host to bind (default 0.0.0.0)")
     .option("-d, --dir <dir>", "Build directory to serve", "dist")
     .option("--no-csp", "Disable Content-Security-Policy header")
+    .option("--csp-policy <policy>", "Replace the entire Content-Security-Policy with a custom string")
+    .option("--csp-add <fragment>", 'Add sources to one CSP directive, e.g. "script-src https://static.cloudflareinsights.com" (repeatable)', collectCsp, [])
     .option("--no-hsts", "Disable Strict-Transport-Security header")
     .option("--no-early-hints", "Disable HTTP 103 Early Hints")
     .option("--cors", "Send Access-Control-Allow-Origin: *")
@@ -67,6 +73,8 @@ program
     host: opts.host,
     dir: opts.dir,
     csp: opts.csp,
+    cspPolicy: opts.cspPolicy,
+    cspAdd: opts.cspAdd,
     hsts: opts.hsts,
     earlyHints: opts.earlyHints,
     cors: opts.cors,
