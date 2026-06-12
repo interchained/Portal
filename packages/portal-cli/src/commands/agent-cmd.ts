@@ -4,11 +4,12 @@
  *
  * Agents are real defineAgent({ ... }) definitions loaded from agents/*.agent.ts.
  * Their declared permissions are enforced:
- *   - canPatch: false        → read-only; the agent reviews and reports, never writes
+ *   - canPatch: false        → read-only; the agent analyzes and reports, never writes
  *   - canPatch: true         → may produce patches
  *   - requiresApproval: true → patches stay pending for `portal patch`
  *   - requiresApproval: false→ clean patches are applied automatically
- * When requiresApproval is unset, it falls back to the contract's publishing policy.
+ * When requiresApproval is unset it falls back to the contract's publishing policy,
+ * defaulting to "requires approval" unless publishing is explicitly "immediate".
  */
 
 import { readFile, readdir } from "node:fs/promises";
@@ -22,26 +23,54 @@ import {
   createPatch,
   applyPatch,
 } from "@interchained/portal-agent";
-import type { AgentDefinition } from "@interchained/portal-contract";
+import type { AgentDefinition, AppContract } from "@interchained/portal-contract";
 import { banner, header, success, fail, info, step, blank } from "../utils/print.js";
 import { loadContract } from "../utils/contract.js";
 import { findAgentFiles, matchAgentFile, loadAgent } from "../utils/agents.js";
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-function permsLabel(def: AgentDefinition): string {
+/**
+ * Resolve whether an agent's patches require approval.
+ * Fail-safe: defaults to true unless the contract explicitly publishes immediately.
+ */
+function resolveRequiresApproval(def: AgentDefinition, contract: AppContract): boolean {
+  return def.requiresApproval ?? contract.policies?.publishing !== "immediate";
+}
+
+function permsLabel(def: AgentDefinition, contract: AppContract): string {
   const canPatch = def.canPatch === true;
-  const requiresApproval = def.requiresApproval !== false; // default to safe
   const parts = [
     canPatch ? pc.yellow("can patch") : pc.dim("read-only"),
     canPatch
-      ? requiresApproval
+      ? resolveRequiresApproval(def, contract)
         ? pc.cyan("requires approval")
         : pc.dim("auto-apply")
       : null,
     def.model ? pc.dim(`model: ${def.model}`) : null,
   ].filter(Boolean);
   return parts.join("  ");
+}
+
+interface AgentFinding {
+  check?: string;
+  status?: string;
+  message?: string;
+  line?: number | null;
+  suggestion?: string;
+}
+
+/** Extract a JSON findings array from a model response that may include prose/fences. */
+function parseFindings(raw: string): AgentFinding[] {
+  const match = raw.match(/\[[\s\S]*\]/);
+  if (!match) return [];
+  try {
+    const arr = JSON.parse(match[0]) as unknown;
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((f): f is AgentFinding => typeof f === "object" && f !== null);
+  } catch {
+    return [];
+  }
 }
 
 // ── portal agent list ─────────────────────────────────────────────────────────
@@ -60,6 +89,8 @@ export async function agentListCommand(): Promise<void> {
     return;
   }
 
+  const contract = await loadContract(root);
+
   header("Configured Agents");
   blank();
 
@@ -67,7 +98,7 @@ export async function agentListCommand(): Promise<void> {
     const def = await loadAgent(join(agentsDir, file));
     console.log(`${pc.bold(pc.cyan(def.name))}  ${pc.dim("·")}  ${pc.dim(file)}`);
     console.log(`  ${def.task || pc.dim("No task description")}`);
-    console.log(`  ${permsLabel(def)}`);
+    console.log(`  ${permsLabel(def, contract)}`);
     blank();
   }
 }
@@ -96,12 +127,11 @@ export async function agentRunCommand(name: string): Promise<void> {
 
   const def      = await loadAgent(join(agentsDir, agentFile));
   const canPatch = def.canPatch === true;
-  const requiresApproval =
-    def.requiresApproval ?? (contract.policies?.publishing === "human_review");
+  const requiresApproval = resolveRequiresApproval(def, contract);
   const task = def.task || def.name;
 
   const mode = !canPatch
-    ? "read-only (review & report)"
+    ? "read-only (analyze & report)"
     : requiresApproval
       ? "propose patches (requires approval)"
       : "auto-apply clean patches";
@@ -112,14 +142,13 @@ export async function agentRunCommand(name: string): Promise<void> {
   console.log(pc.dim(`  Mode: ${mode}`));
   blank();
 
-  let runner: Runner;
-  try {
-    runner = new Runner(def.model ? { model: def.model } : {});
-  } catch {
-    fail("AIASSIST_API_KEY not set.");
+  // Agents need a model key to do any work — fail early and clearly.
+  if (!process.env["AIASSIST_API_KEY"] && !process.env["VITE_AIAS_API_KEY"]) {
+    fail("AIASSIST_API_KEY not set — agents need it to run.");
     process.exit(1);
   }
 
+  const runner   = new Runner(def.model ? { model: def.model } : {});
   const sentinel = new Sentinel(def.sentinel ? { model: def.sentinel } : {});
   const store    = new PatchStore(root);
 
@@ -143,9 +172,11 @@ export async function agentRunCommand(name: string): Promise<void> {
   }
 
   const contractSummary = `App: ${contract.name}\nGoals: ${contract.goals.join("; ")}`;
-  let proposed = 0;
-  let applied  = 0;
-  let reviewed = 0;
+  let proposed  = 0;
+  let applied   = 0;
+  let reviewed  = 0;
+  let findings  = 0;
+  let firstError: string | null = null;
 
   for (const filePath of routeFiles) {
     const content = await readFile(filePath, "utf-8");
@@ -153,6 +184,32 @@ export async function agentRunCommand(name: string): Promise<void> {
 
     const spinner = ora(`  Processing ${rel}…`).start();
     try {
+      // ── Read-only agent: analyze and report, never write. ───────────────────
+      if (!canPatch) {
+        const raw = await runner.analyzeFile({
+          filePath: rel,
+          content,
+          checks: [task],
+          contract: contractSummary,
+        });
+        spinner.stop();
+        reviewed++;
+
+        const notable = parseFindings(raw).filter((f) => f.status !== "pass");
+        if (notable.length === 0) {
+          step(`${rel}  ${pc.dim("·")}  ${pc.green("ok")}`);
+        } else {
+          for (const f of notable) {
+            findings++;
+            const tag = f.status === "fail" ? pc.red("fail") : pc.yellow("warn");
+            step(`${rel}  ${pc.dim("·")}  ${tag}  ${f.message ?? "issue found"}`);
+            if (f.suggestion) console.log(pc.dim(`      → ${f.suggestion}`));
+          }
+        }
+        continue;
+      }
+
+      // ── Patch-capable agent: generate, review, save / apply. ─────────────────
       const next = await runner.generatePatch({
         filePath: rel,
         originalContent: content,
@@ -161,8 +218,7 @@ export async function agentRunCommand(name: string): Promise<void> {
       });
       spinner.stop();
 
-      // No meaningful change → nothing to do.
-      if (next.trim() === content.trim()) continue;
+      if (next.trim() === content.trim()) continue; // no meaningful change
 
       const review = await sentinel.review({
         contract,
@@ -171,15 +227,6 @@ export async function agentRunCommand(name: string): Promise<void> {
         proposed: next,
         agentTask: task,
       });
-
-      // Read-only agent: report findings, never write a patch.
-      if (!canPatch) {
-        reviewed++;
-        const headline = review.approved ? pc.green("ok") : pc.yellow("attention");
-        step(`${rel}  ${pc.dim("·")}  ${headline}  ${review.summary}`);
-        for (const v of review.violations) console.log(pc.dim(`      • ${v}`));
-        continue;
-      }
 
       const patch = createPatch({
         agent: def.name,
@@ -204,14 +251,21 @@ export async function agentRunCommand(name: string): Promise<void> {
       } else {
         step(`${rel}  ${pc.dim("·")}  ${pc.cyan("patch saved")}  run portal patch to review`);
       }
-    } catch {
+    } catch (err) {
       spinner.stop();
+      if (!firstError) firstError = err instanceof Error ? err.message : String(err);
     }
   }
 
   blank();
+  if (firstError) fail(`Some files could not be processed: ${firstError}`);
+
   if (!canPatch) {
-    info(`Read-only run complete — ${reviewed} file${reviewed !== 1 ? "s" : ""} reviewed, nothing written.`);
+    if (findings > 0) {
+      info(`Read-only run complete — ${reviewed} file${reviewed !== 1 ? "s" : ""} reviewed, ${findings} finding${findings !== 1 ? "s" : ""} reported.`);
+    } else {
+      success(`Read-only run complete — ${reviewed} file${reviewed !== 1 ? "s" : ""} reviewed, no issues found.`);
+    }
   } else if (proposed === 0) {
     info("No changes proposed.");
   } else if (applied > 0) {
