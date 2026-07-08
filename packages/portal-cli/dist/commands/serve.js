@@ -31,6 +31,7 @@ import { createHash } from "node:crypto";
 import { brotliCompressSync, gzipSync, constants as zc, } from "node:zlib";
 import pc from "picocolors";
 import { banner, header, success, info, step, blank, icon } from "../utils/print.js";
+import { bootWordPressBridge } from "../bridge/wordpress.js";
 // ── MIME types ────────────────────────────────────────────────────────────────
 const MIME = {
     ".html": "text/html; charset=utf-8",
@@ -380,6 +381,27 @@ export async function serveCommand(opts = {}) {
         pc.dim(`   −${brPct.toFixed(1)}%`) +
         pc.yellow(`   ${icon.spark} saves ${fmtBytes(brSaved)} per full load`));
     blank();
+    // ── WordPress Portal Bridge (env-driven) ────────────────────────────────────
+    // PORTAL_BRIDGE_BASE_URL + PORTAL_TMK present → WordPress-backed routes are
+    // server-rendered ahead of the SPA fallback (snapshot-first by default).
+    // Malformed env or an unservable bridge fails the boot loudly.
+    let bridge = null;
+    try {
+        bridge = await bootWordPressBridge((message) => console.log(pc.dim("   " + message)));
+    }
+    catch (err) {
+        blank();
+        console.log(`${icon.fail} ${pc.red("WordPress Portal Bridge failed to boot")}`);
+        console.log(pc.red("   " + err.message));
+        blank();
+        process.exit(1);
+    }
+    if (bridge) {
+        success("WordPress Portal Bridge active");
+        for (const line of bridge.bannerLines())
+            console.log(pc.dim("   " + line));
+        blank();
+    }
     // ── Request handler ─────────────────────────────────────────────────────────
     let inFlight = 0;
     let ready = true;
@@ -417,7 +439,11 @@ export async function serveCommand(opts = {}) {
         // Health / readiness (tolerant of query strings, e.g. /__health?probe=1)
         if (pathname === "/__health") {
             res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-            res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
+            res.end(JSON.stringify({
+                status: "ok",
+                uptime: process.uptime(),
+                ...(bridge ? bridge.healthFragment() : {}),
+            }));
             return;
         }
         if (pathname === "/__ready") {
@@ -432,105 +458,131 @@ export async function serveCommand(opts = {}) {
             res.end("Forbidden");
             return;
         }
-        // Lookup: exact → directory index → SPA fallback
-        let asset = assets.get(norm) ??
-            (norm.endsWith("/") ? assets.get(norm + "index.html") : undefined);
-        let isFallback = false;
-        if (!asset) {
-            // Static asset miss (has an extension) → 404
-            if (extname(norm)) {
+        // ── WordPress Portal Bridge: dynamic public routes ──────────────────────
+        // Extensionless paths (plus /sitemap.xml) are offered to the bridge first;
+        // it answers only routes it actually resolves — everything else falls
+        // through to the untouched static + SPA pipeline below.
+        if (bridge && (norm === "/sitemap.xml" || !extname(norm))) {
+            bridge
+                .handle(req, res, norm, secHeaders)
+                .then((handled) => {
+                if (!handled)
+                    serveStatic();
+            })
+                .catch((err) => {
+                console.log(pc.red(`   bridge error: ${err.message}`));
+                if (!res.headersSent) {
+                    res.writeHead(500, { "Content-Type": "text/plain", ...secHeaders });
+                    res.end("Bridge Error");
+                }
+                else {
+                    res.end();
+                }
+            });
+            return;
+        }
+        serveStatic();
+        function serveStatic() {
+            // Lookup: exact → directory index → SPA fallback
+            let asset = assets.get(norm) ??
+                (norm.endsWith("/") ? assets.get(norm + "index.html") : undefined);
+            let isFallback = false;
+            if (!asset) {
+                // Static asset miss (has an extension) → 404
+                if (extname(norm)) {
+                    res.writeHead(404, { "Content-Type": "text/plain", ...secHeaders });
+                    res.end("Not Found");
+                    return;
+                }
+                // Otherwise serve the SPA shell
+                asset = indexAsset;
+                isFallback = true;
+            }
+            if (!asset) {
                 res.writeHead(404, { "Content-Type": "text/plain", ...secHeaders });
                 res.end("Not Found");
                 return;
             }
-            // Otherwise serve the SPA shell
-            asset = indexAsset;
-            isFallback = true;
-        }
-        if (!asset) {
-            res.writeHead(404, { "Content-Type": "text/plain", ...secHeaders });
-            res.end("Not Found");
-            return;
-        }
-        // Negotiate encoding FIRST — a strong ETag must vary per representation
-        // (RFC 9110), so the identity, gzip and brotli bodies each get their own.
-        const enc = pickEncoding(req.headers["accept-encoding"], asset);
-        const etag = enc === "br" ? asset.etag.slice(0, -1) + '-br"'
-            : enc === "gzip" ? asset.etag.slice(0, -1) + '-gz"'
-                : asset.etag;
-        // Conditional request → 304 (matched against the representation ETag)
-        const inm = req.headers["if-none-match"];
-        if (inm && inm === etag) {
-            res.writeHead(304, {
-                "ETag": etag,
-                "Cache-Control": asset.cacheControl,
-                "Vary": "Accept-Encoding",
-                ...secHeaders,
-            });
-            res.end();
-            return;
-        }
-        const baseHeaders = {
-            "Content-Type": asset.mime,
-            "ETag": etag,
-            "Last-Modified": asset.lastModified,
-            "Cache-Control": asset.cacheControl,
-            "Vary": "Accept-Encoding",
-            ...secHeaders,
-        };
-        if (opts.cors)
-            baseHeaders["Access-Control-Allow-Origin"] = "*";
-        const isMedia = asset.mime.startsWith("video/") || asset.mime.startsWith("audio/");
-        // Range requests — media only, always identity bytes (media is never compressed).
-        const range = req.headers["range"];
-        if (range && isMedia && !isFallback) {
-            const parsed = parseRange(range, asset.raw.length);
-            if (parsed) {
-                const { start, end } = parsed;
-                res.writeHead(206, {
-                    ...baseHeaders,
-                    "ETag": asset.etag,
-                    "Content-Range": `bytes ${start}-${end}/${asset.raw.length}`,
-                    "Accept-Ranges": "bytes",
-                    "Content-Length": String(end - start + 1),
-                });
-                res.end(req.method === "HEAD" ? undefined : asset.raw.subarray(start, end + 1));
-                return;
-            }
-            // Syntactically valid header but unsatisfiable → 416.
-            if (/^bytes=\d*-\d*$/.test(range.trim())) {
-                res.writeHead(416, {
-                    ...baseHeaders,
-                    "Content-Range": `bytes */${asset.raw.length}`,
+            // Negotiate encoding FIRST — a strong ETag must vary per representation
+            // (RFC 9110), so the identity, gzip and brotli bodies each get their own.
+            const enc = pickEncoding(req.headers["accept-encoding"], asset);
+            const etag = enc === "br" ? asset.etag.slice(0, -1) + '-br"'
+                : enc === "gzip" ? asset.etag.slice(0, -1) + '-gz"'
+                    : asset.etag;
+            // Conditional request → 304 (matched against the representation ETag)
+            const inm = req.headers["if-none-match"];
+            if (inm && inm === etag) {
+                res.writeHead(304, {
+                    "ETag": etag,
+                    "Cache-Control": asset.cacheControl,
+                    "Vary": "Accept-Encoding",
+                    ...secHeaders,
                 });
                 res.end();
                 return;
             }
-        }
-        // 🚀 Early Hints — push critical preloads before the HTML body.
-        // Fires for the shell document however it was reached: "/", "/index.html",
-        // or a deep SPA-fallback route.
-        if (asset === indexAsset && earlyHintLinks.length > 0 && typeof res.writeEarlyHints === "function") {
-            try {
-                res.writeEarlyHints({ link: earlyHintLinks });
+            const baseHeaders = {
+                "Content-Type": asset.mime,
+                "ETag": etag,
+                "Last-Modified": asset.lastModified,
+                "Cache-Control": asset.cacheControl,
+                "Vary": "Accept-Encoding",
+                ...secHeaders,
+            };
+            if (opts.cors)
+                baseHeaders["Access-Control-Allow-Origin"] = "*";
+            const isMedia = asset.mime.startsWith("video/") || asset.mime.startsWith("audio/");
+            // Range requests — media only, always identity bytes (media is never compressed).
+            const range = req.headers["range"];
+            if (range && isMedia && !isFallback) {
+                const parsed = parseRange(range, asset.raw.length);
+                if (parsed) {
+                    const { start, end } = parsed;
+                    res.writeHead(206, {
+                        ...baseHeaders,
+                        "ETag": asset.etag,
+                        "Content-Range": `bytes ${start}-${end}/${asset.raw.length}`,
+                        "Accept-Ranges": "bytes",
+                        "Content-Length": String(end - start + 1),
+                    });
+                    res.end(req.method === "HEAD" ? undefined : asset.raw.subarray(start, end + 1));
+                    return;
+                }
+                // Syntactically valid header but unsatisfiable → 416.
+                if (/^bytes=\d*-\d*$/.test(range.trim())) {
+                    res.writeHead(416, {
+                        ...baseHeaders,
+                        "Content-Range": `bytes */${asset.raw.length}`,
+                    });
+                    res.end();
+                    return;
+                }
             }
-            catch { /* proxy may not forward 1xx — harmless */ }
-        }
-        // Apply the negotiated encoding to the body.
-        let body = asset.raw;
-        if (enc === "br" && asset.br) {
-            body = asset.br;
-            baseHeaders["Content-Encoding"] = "br";
-        }
-        else if (enc === "gzip" && asset.gz) {
-            body = asset.gz;
-            baseHeaders["Content-Encoding"] = "gzip";
-        }
-        baseHeaders["Content-Length"] = String(body.length);
-        if (isMedia)
-            baseHeaders["Accept-Ranges"] = "bytes";
-        res.writeHead(200, baseHeaders);
-        res.end(req.method === "HEAD" ? undefined : body);
+            // 🚀 Early Hints — push critical preloads before the HTML body.
+            // Fires for the shell document however it was reached: "/", "/index.html",
+            // or a deep SPA-fallback route.
+            if (asset === indexAsset && earlyHintLinks.length > 0 && typeof res.writeEarlyHints === "function") {
+                try {
+                    res.writeEarlyHints({ link: earlyHintLinks });
+                }
+                catch { /* proxy may not forward 1xx — harmless */ }
+            }
+            // Apply the negotiated encoding to the body.
+            let body = asset.raw;
+            if (enc === "br" && asset.br) {
+                body = asset.br;
+                baseHeaders["Content-Encoding"] = "br";
+            }
+            else if (enc === "gzip" && asset.gz) {
+                body = asset.gz;
+                baseHeaders["Content-Encoding"] = "gzip";
+            }
+            baseHeaders["Content-Length"] = String(body.length);
+            if (isMedia)
+                baseHeaders["Accept-Ranges"] = "bytes";
+            res.writeHead(200, baseHeaders);
+            res.end(req.method === "HEAD" ? undefined : body);
+        } // end serveStatic
     });
     // ── Graceful shutdown ─────────────────────────────────────────────────────
     let shuttingDown = false;

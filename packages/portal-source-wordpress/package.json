@@ -1,0 +1,35 @@
+{
+  "name": "@interchained/portal-source-wordpress",
+  "version": "0.1.0",
+  "description": "WordPress Portal Bridge source adapter — WordPress as your backend, Portal as your frontend, HMAC-secured tunnel between them",
+  "license": "GPL-3.0-or-later",
+  "author": "Interchained <dev@interchained.org>",
+  "type": "module",
+  "exports": {
+    ".": { "import": "./dist/src/index.js", "types": "./dist/src/index.d.ts" }
+  },
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc && node --test \"dist/test/*.test.js\"",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

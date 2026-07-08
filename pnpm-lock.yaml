@@ -37,8 +37,8 @@ importers:
   packages/portal-agent:
     dependencies:
       '@interchained/portal-contract':
-        specifier: workspace:*
-        version: link:../portal-contract
+        specifier: ^0.1.0
+        version: 0.1.0
       ora:
         specifier: ^8.0.1
         version: 8.2.0
@@ -56,14 +56,17 @@ importers:
   packages/portal-cli:
     dependencies:
       '@interchained/portal-agent':
-        specifier: workspace:*
-        version: link:../portal-agent
+        specifier: ^0.1.6
+        version: 0.1.6
       '@interchained/portal-contract':
-        specifier: workspace:*
-        version: link:../portal-contract
+        specifier: ^0.1.0
+        version: 0.1.0
       '@interchained/portal-core':
-        specifier: workspace:*
-        version: link:../portal-core
+        specifier: ^0.1.2
+        version: 0.1.2(vite@5.4.21(@types/node@20.19.43))
+      '@interchained/portal-source-wordpress':
+        specifier: workspace:^
+        version: link:../portal-source-wordpress
       commander:
         specifier: ^12.0.0
         version: 12.1.0
@@ -102,8 +105,8 @@ importers:
   packages/portal-core:
     dependencies:
       '@interchained/portal-contract':
-        specifier: workspace:*
-        version: link:../portal-contract
+        specifier: ^0.1.0
+        version: 0.1.0
       chokidar:
         specifier: ^3.6.0
         version: 3.6.0
@@ -124,8 +127,8 @@ importers:
   packages/portal-react:
     dependencies:
       '@interchained/portal-contract':
-        specifier: workspace:*
-        version: link:../portal-contract
+        specifier: ^0.1.0
+        version: 0.1.0
       react:
         specifier: '>=18.0.0'
         version: 19.2.7
@@ -142,6 +145,15 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.0
         version: 18.3.7(@types/react@18.3.31)
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
+
+  packages/portal-source-wordpress:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.12.7
+        version: 20.19.43
       typescript:
         specifier: ^5.4.5
         version: 5.9.3
@@ -285,6 +297,20 @@ packages:
     engines: {node: '>=12'}
     cpu: [x64]
     os: [win32]
+
+  '@interchained/portal-agent@0.1.6':
+    resolution: {integrity: sha512-BeVd/SOLjyRCg8IaQljXDy5ebuDcbKqd3i/ZTqcogfVmB9k2cSVA76N7WtU5BeUxet7UHKt4GupYEKtKoQ4OZA==}
+    engines: {node: '>=18'}
+
+  '@interchained/portal-contract@0.1.0':
+    resolution: {integrity: sha512-ov8j1dLmvdLNGyYQXRI4x345G/DA7zo1ulRVmMct5WJ6bH2xIsKHsQ3zkIvnAfaqpkrJN1gFvzfsyMJaSDivXA==}
+    engines: {node: '>=18'}
+
+  '@interchained/portal-core@0.1.2':
+    resolution: {integrity: sha512-Oi4oJ/+DkyD3XnUpAw3+bx/eL5lctfhTjMLE/g49Icjh226cgovV+BnurHzPm7d75FN/lB1hEgl88fghZUhHCg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      vite: '>=5.0.0'
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -900,6 +926,21 @@ snapshots:
 
   '@esbuild/win32-x64@0.21.5':
     optional: true
+
+  '@interchained/portal-agent@0.1.6':
+    dependencies:
+      '@interchained/portal-contract': 0.1.0
+      ora: 8.2.0
+      picocolors: 1.1.1
+
+  '@interchained/portal-contract@0.1.0': {}
+
+  '@interchained/portal-core@0.1.2(vite@5.4.21(@types/node@20.19.43))':
+    dependencies:
+      '@interchained/portal-contract': 0.1.0
+      chokidar: 3.6.0
+      glob: 10.5.0
+      vite: 5.4.21(@types/node@20.19.43)
 
   '@isaacs/cliui@8.0.2':
     dependencies:

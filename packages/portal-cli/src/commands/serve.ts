@@ -36,6 +36,7 @@ import {
 } from "node:zlib";
 import pc from "picocolors";
 import { banner, header, success, info, step, blank, icon } from "../utils/print.js";
+import { bootWordPressBridge, type WordPressServeBridge } from "../bridge/wordpress.js";
 
 // ── MIME types ────────────────────────────────────────────────────────────────
 
@@ -452,6 +453,26 @@ export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
   );
   blank();
 
+  // ── WordPress Portal Bridge (env-driven) ────────────────────────────────────
+  // PORTAL_BRIDGE_BASE_URL + PORTAL_TMK present → WordPress-backed routes are
+  // server-rendered ahead of the SPA fallback (snapshot-first by default).
+  // Malformed env or an unservable bridge fails the boot loudly.
+  let bridge: WordPressServeBridge | null = null;
+  try {
+    bridge = await bootWordPressBridge((message) => console.log(pc.dim("   " + message)));
+  } catch (err) {
+    blank();
+    console.log(`${icon.fail} ${pc.red("WordPress Portal Bridge failed to boot")}`);
+    console.log(pc.red("   " + (err as Error).message));
+    blank();
+    process.exit(1);
+  }
+  if (bridge) {
+    success("WordPress Portal Bridge active");
+    for (const line of bridge.bannerLines()) console.log(pc.dim("   " + line));
+    blank();
+  }
+
   // ── Request handler ─────────────────────────────────────────────────────────
   let inFlight = 0;
   let ready = true;
@@ -495,7 +516,13 @@ export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
     // Health / readiness (tolerant of query strings, e.g. /__health?probe=1)
     if (pathname === "/__health") {
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-      res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
+      res.end(
+        JSON.stringify({
+          status: "ok",
+          uptime: process.uptime(),
+          ...(bridge ? bridge.healthFragment() : {}),
+        })
+      );
       return;
     }
     if (pathname === "/__ready") {
@@ -511,6 +538,31 @@ export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
       return;
     }
 
+    // ── WordPress Portal Bridge: dynamic public routes ──────────────────────
+    // Extensionless paths (plus /sitemap.xml) are offered to the bridge first;
+    // it answers only routes it actually resolves — everything else falls
+    // through to the untouched static + SPA pipeline below.
+    if (bridge && (norm === "/sitemap.xml" || !extname(norm))) {
+      bridge
+        .handle(req, res, norm, secHeaders)
+        .then((handled) => {
+          if (!handled) serveStatic();
+        })
+        .catch((err) => {
+          console.log(pc.red(`   bridge error: ${(err as Error).message}`));
+          if (!res.headersSent) {
+            res.writeHead(500, { "Content-Type": "text/plain", ...secHeaders });
+            res.end("Bridge Error");
+          } else {
+            res.end();
+          }
+        });
+      return;
+    }
+
+    serveStatic();
+
+    function serveStatic(): void {
     // Lookup: exact → directory index → SPA fallback
     let asset =
       assets.get(norm) ??
@@ -614,6 +666,7 @@ export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
 
     res.writeHead(200, baseHeaders);
     res.end(req.method === "HEAD" ? undefined : body);
+    } // end serveStatic
   });
 
   // ── Graceful shutdown ─────────────────────────────────────────────────────

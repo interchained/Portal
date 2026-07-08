@@ -78,6 +78,27 @@ export interface IntegrationsContract {
   [key: string]: IntegrationStatus | string | undefined;
 }
 
+// ── Content source ────────────────────────────────────────────────────────────
+
+/**
+ * External backend that owns content editing while Portal owns rendering.
+ * First implementation: "wordpress-portal-bridge" — WordPress remains the
+ * admin panel, Portal renders the public site through an HMAC-signed tunnel
+ * (the wp-portal-bridge plugin on the WordPress side).
+ *
+ * Env vars named here are the defaults the runtime reads; the contract block
+ * documents intent and lets `portal doctor` verify configuration.
+ */
+export interface SourceContract {
+  type: "wordpress-portal-bridge" | string;
+  /** Env var carrying the backend origin (default PORTAL_BRIDGE_BASE_URL). */
+  baseUrlEnv?: string;
+  /** Env var carrying the tunnel master key (default PORTAL_TMK). */
+  tmkEnv?: string;
+  /** "snapshot-first" (default, production-safe) or "live". */
+  mode?: "snapshot-first" | "live";
+}
+
 // ── Quality gates ─────────────────────────────────────────────────────────────
 
 /**
@@ -155,6 +176,13 @@ export interface AppContract {
 
   /** Declared integrations — lets `portal doctor` warn about missing config */
   integrations?: IntegrationsContract;
+
+  /**
+   * External content source (e.g. WordPress via WP Portal Bridge).
+   * When present — or when the bridge env vars exist — the runtime serves
+   * source-backed routes ahead of the SPA fallback.
+   */
+  source?: SourceContract;
 
   /**
    * Quality gates — explicit pass/fail rules used by `portal audit`
