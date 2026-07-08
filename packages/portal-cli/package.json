@@ -24,6 +24,7 @@
     "@interchained/portal-contract": "^0.1.0",
     "@interchained/portal-agent": "^0.1.6",
     "@interchained/portal-core": "^0.1.2",
+    "@interchained/portal-source-wordpress": "workspace:^",
     "commander": "^12.0.0",
     "picocolors": "^1.0.1",
     "ora": "^8.0.1",

@@ -214,6 +214,21 @@ The runner does the work. The sentinel catches mistakes. You make the final call
 | `@interchained/portal-react` | PortalProvider, Router, Link, Head, hooks |
 | `portal-cli` | The `portal` CLI binary |
 | `@interchained/create-portal-app` | `npm create @interchained/portal-app` scaffolder |
+| `@interchained/portal-source-wordpress` | WordPress Portal Bridge source adapter — WordPress backend, Portal frontend |
+
+---
+
+## WordPress backend? Keep it.
+
+Portal speaks [WP Portal Bridge](https://github.com/Eth-Interchained/wp-portal-bridge): install the plugin on any WordPress site, copy two env vars, and `portal serve` renders the public site from WordPress-backed content through an HMAC-signed tunnel — snapshot-first, SEO-preserving, resilient to the backend going down.
+
+```bash
+PORTAL_BRIDGE_BASE_URL=https://cms.example.com
+PORTAL_TMK=portal_tmk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+portal serve
+```
+
+Clients keep editing in the WordPress admin they know. Visitors get Portal. Paths, titles, meta, canonicals — everything the site earned is preserved. See `examples/wordpress-bridge/`.
 
 ---
 
@@ -222,6 +237,8 @@ The runner does the work. The sentinel catches mistakes. You make the final call
 ```bash
 AIASSIST_API_KEY=...   # or VITE_AIAS_API_KEY
 ```
+
+WordPress bridge (optional): `PORTAL_BRIDGE_BASE_URL`, `PORTAL_TMK` — see above.
 
 That's it. No blockchain required. No hosting lock-in.
 
