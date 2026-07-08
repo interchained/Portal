@@ -220,7 +220,7 @@ The runner does the work. The sentinel catches mistakes. You make the final call
 
 ## WordPress backend? Keep it.
 
-Portal speaks [WP Portal Bridge](https://github.com/Eth-Interchained/wp-portal-bridge): install the plugin on any WordPress site, copy two env vars, and `portal serve` renders the public site from WordPress-backed content through an HMAC-signed tunnel — snapshot-first, SEO-preserving, resilient to the backend going down.
+Portal speaks [WP Portal Bridge](https://github.com/interchained/wp-portal-bridge): install the plugin on any WordPress site, copy two env vars, and `portal serve` renders the public site from WordPress-backed content through an HMAC-signed tunnel — snapshot-first, SEO-preserving, resilient to the backend going down.
 
 ```bash
 PORTAL_BRIDGE_BASE_URL=https://cms.example.com
