@@ -1,6 +1,6 @@
 {
   "name": "@interchained/portal-source-wordpress",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "WordPress Portal Bridge source adapter — WordPress as your backend, Portal as your frontend, HMAC-secured tunnel between them",
   "license": "GPL-3.0-or-later",
   "author": "Interchained <dev@interchained.org>",

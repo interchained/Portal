@@ -6,7 +6,7 @@ your client already knows; Portal renders the site their visitors see.
 ## The loop this example proves
 
 1. A client edits a page in **WordPress Admin**.
-2. The [wp-portal-bridge](https://github.com/Eth-Interchained/wp-portal-bridge)
+2. The [wp-portal-bridge](https://github.com/interchained/wp-portal-bridge)
    plugin exposes that page through the signed contract API.
 3. Portal reads `PORTAL_BRIDGE_BASE_URL` + `PORTAL_TMK` and signs every request
    (PORTAL-BRIDGE-V1 — HMAC-SHA256, timestamped, nonce-replay-protected).

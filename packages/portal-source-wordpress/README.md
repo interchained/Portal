@@ -2,7 +2,7 @@
 
 **WordPress as your backend. Portal as your frontend. HMAC-secured bridge between them.**
 
-The Portal side of [WP Portal Bridge](https://github.com/Eth-Interchained/wp-portal-bridge): clients keep the WordPress admin they already know — pages, posts, media, menus, Yoast/Rank Math/AIOSEO — while Portal renders the site their visitors actually see. Lean, fast, cacheable, SEO-safe, authority-preserving.
+The Portal side of [WP Portal Bridge](https://github.com/interchained/wp-portal-bridge): clients keep the WordPress admin they already know — pages, posts, media, menus, Yoast/Rank Math/AIOSEO — while Portal renders the site their visitors actually see. Lean, fast, cacheable, SEO-safe, authority-preserving.
 
 ```
 WordPress Admin → wp-portal-bridge plugin → signed contract API
@@ -11,7 +11,7 @@ WordPress Admin → wp-portal-bridge plugin → signed contract API
 
 ## Setup — two env vars
 
-Install [wp-portal-bridge](https://github.com/Eth-Interchained/wp-portal-bridge) on the WordPress site, click **Connect Portal Frontend**, copy the env block:
+Install [wp-portal-bridge](https://github.com/interchained/wp-portal-bridge) on the WordPress site, click **Connect Portal Frontend**, copy the env block:
 
 ```bash
 PORTAL_BRIDGE_BASE_URL=https://cms.example.com
